@@ -1,0 +1,151 @@
+# ============================================================
+# RBAC – namespace taskmanager
+#
+# Principe du moindre privilège : chaque composant possède
+# son propre ServiceAccount avec exactement les permissions
+# dont il a besoin — ni plus, ni moins.
+# ============================================================
+
+# ----------------------------------------------------------
+# 1. ServiceAccount pour l'application taskmanager
+# L'application Flask n'accède pas à l'API Kubernetes.
+# ----------------------------------------------------------
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: taskmanager-sa
+  namespace: # ???
+  labels:
+    app: taskmanager
+# ??? Quelle option empêche l'injection automatique du token API dans le Pod ?
+# Cherchez : automountServiceAccountToken
+# Justifiez pourquoi c'est une bonne pratique dans votre rendu.
+
+---
+# ----------------------------------------------------------
+# 2. ServiceAccount pour Redis
+# Redis n'accède pas à l'API Kubernetes.
+# ----------------------------------------------------------
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: redis-sa
+  namespace: # ???
+  labels:
+    app: redis
+automountServiceAccountToken: # ???
+
+---
+# ----------------------------------------------------------
+# 3. ServiceAccount CI/CD – utilisé par le job "deploy" du pipeline
+# ----------------------------------------------------------
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: github-actions
+  namespace: # ???
+  labels:
+    app: taskmanager
+    role: ci-cd
+
+---
+# Role CI/CD : permissions minimales pour déployer et surveiller le rollout
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: github-actions-deployer
+  namespace: # ???
+rules:
+  # ??? Le job "deploy" exécute : kubectl set image, kubectl apply, kubectl rollout status
+  # Quelles ressources et quels verbes sont nécessaires pour chaque opération ?
+  #
+  # Rappel du format :
+  # - apiGroups: ["apps"]     # "apps" pour Deployments/ReplicaSets, "" pour Pods/Services
+  #   resources: ["..."]
+  #   verbs: ["get", "list", "patch", "update", ...]
+  #
+  # Complétez les règles ci-dessous :
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: # ??? listez les verbes nécessaires pour mettre à jour un Deployment
+  - apiGroups: ["apps"]
+    resources: ["replicasets"]
+    verbs: # ??? kubectl rollout status lit les ReplicaSets — quels verbes ?
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: # ??? pour surveiller l'état du rollout
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: # ??? si vos manifestes incluent des ConfigMaps
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: github-actions-deployer-binding
+  namespace: # ???
+subjects:
+  - kind: ServiceAccount
+    name: # ??? nom du ServiceAccount CI/CD défini plus haut
+    namespace: # ???
+roleRef:
+  kind: Role
+  name: # ??? nom du Role défini plus haut
+  apiGroup: rbac.authorization.k8s.io
+
+---
+# ----------------------------------------------------------
+# 4. Rôle lecture seule – pour inspecter le namespace sans modifier
+# Utile pour le debug et pour les outils de monitoring.
+# ----------------------------------------------------------
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: taskmanager-viewer
+  namespace: # ???
+rules:
+  # ??? Accordez l'accès en lecture seule aux ressources suivantes :
+  # - pods (avec leurs logs)
+  # - services, endpoints
+  # - configmaps
+  # - events
+  # - persistentvolumeclaims
+  # - deployments, replicasets
+  # - ingresses, networkpolicies
+  # - horizontalpodautoscalers
+  #
+  # Quels verbes correspondent à "lecture seule" ?
+  - apiGroups: [""]
+    resources: # ??? listez les ressources core
+    verbs: # ???
+  - apiGroups: ["apps"]
+    resources: # ???
+    verbs: # ???
+  - apiGroups: ["networking.k8s.io"]
+    resources: # ???
+    verbs: # ???
+  - apiGroups: ["autoscaling"]
+    resources: # ???
+    verbs: # ???
+
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: taskmanager-viewer
+  namespace: # ???
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: taskmanager-viewer-binding
+  namespace: # ???
+subjects:
+  - kind: ServiceAccount
+    name: taskmanager-viewer
+    namespace: # ???
+roleRef:
+  kind: Role
+  name: taskmanager-viewer
+  apiGroup: rbac.authorization.k8s.io

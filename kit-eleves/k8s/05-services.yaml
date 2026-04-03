@@ -1,0 +1,18 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: taskmanager
+  namespace: # ???
+spec:
+  # ??? Choisissez le type de Service approprié pour exposer l'application
+  # depuis l'extérieur du cluster sur minikube.
+  # Justifiez votre choix dans votre document de rendu.
+  type: # ???
+  selector:
+    app: taskmanager
+  ports:
+    - name: http
+      port: 80
+      targetPort: # ??? vers quel port du conteneur ?
+      # ??? Si NodePort : définissez un nodePort (plage 30000-32767)
+      # nodePort: ???
