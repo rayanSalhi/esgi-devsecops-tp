@@ -1,0 +1,93 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: redis-pvc
+  namespace: # ???
+spec:
+  accessModes:
+    - # ??? quel mode d'accès est adapté pour Redis ? (ReadWriteOnce, ReadWriteMany...)
+  resources:
+    requests:
+      storage: # ??? quelle taille est raisonnable pour ce TP ? (ex: 1Gi)
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis
+  namespace: # ???
+  labels:
+    app: redis
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: redis
+  template:
+    metadata:
+      labels:
+        app: redis
+    spec:
+      serviceAccountName: # ??? ServiceAccount dédié à Redis (voir 08-rbac.yaml)
+      automountServiceAccountToken: false
+      containers:
+        - name: redis
+          image: redis:7-alpine
+          # Redis doit démarrer avec un mot de passe.
+          # redis-server accepte l'option --requirepass directement en argument.
+          # La variable d'environnement ci-dessous permet de l'injecter sans l'écrire en clair.
+          command: ["redis-server"]
+          args:
+            - "--requirepass"
+            - "$(REDIS_PASSWORD)"    # fait référence à la variable d'env définie ci-dessous
+          env:
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: redis-secret
+                  key: # ??? même clé que dans 02-secret.yaml (ex: REDIS_PASSWORD)
+          ports:
+            - containerPort: # ??? port par défaut de Redis
+          livenessProbe:
+            # Redis ne propose pas d'endpoint HTTP.
+            # Utilisez une probe de type exec avec redis-cli.
+            # Indice : sh -c "redis-cli -a $REDIS_PASSWORD ping"
+            exec:
+              command:
+                - "???"   # remplacez par la commande complète (string unique ou liste de strings)
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          readinessProbe:
+            exec:
+              command:
+                - "???"   # même approche que la liveness probe
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          resources:
+            requests:
+              memory: "???"
+              cpu: "???"
+            limits:
+              memory: "???"
+              cpu: "???"
+          volumeMounts:
+            - name: redis-data
+              mountPath: # ??? répertoire de données par défaut de Redis dans l'image Alpine
+      volumes:
+        - name: redis-data
+          persistentVolumeClaim:
+            claimName: redis-pvc
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis
+  namespace: # ???
+spec:
+  type: # ??? quel type de Service pour Redis ? Doit-il être accessible depuis l'extérieur du cluster ?
+  selector:
+    app: redis
+  ports:
+    - port: # ??? port exposé par le Service
+      targetPort: # ??? port écouté par le conteneur Redis

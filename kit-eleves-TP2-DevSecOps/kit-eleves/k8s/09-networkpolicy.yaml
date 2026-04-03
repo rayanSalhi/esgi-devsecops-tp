@@ -1,0 +1,104 @@
+# ============================================================
+# ÉTAPE 1 : dessinez d'abord le schéma des flux sur papier
+# Posez-vous ces questions :
+#   - Qui doit parler à qui ?
+#   - Sur quel port ?
+#   - Dans quel sens ?
+# Ensuite seulement, traduisez ce schéma en YAML.
+# ============================================================
+
+# Règle 1 : bloquer TOUT le trafic par défaut (ingress ET egress)
+# C'est le point de départ obligatoire du modèle zero-trust.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-all
+  namespace: # ???
+spec:
+  podSelector: {}   # {} = s'applique à tous les Pods du namespace
+  policyTypes:
+    - Ingress
+    - Egress
+
+---
+# Règle 2 : autoriser la résolution DNS
+# Sans cette règle, les Pods ne peuvent pas résoudre les noms de services.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-dns-egress
+  namespace: # ???
+spec:
+  podSelector: {}
+  policyTypes:
+    - Egress
+  egress:
+    - ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+
+---
+# Règle 3 : autoriser le trafic entrant vers l'application (taskmanager)
+# L'Ingress Controller nginx (namespace kube-system) envoie les requêtes HTTP vers l'application.
+# IMPORTANT : sans cette règle, l'Ingress sera configuré mais les requêtes seront bloquées.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-taskmanager-ingress
+  namespace: # ???
+spec:
+  podSelector:
+    matchLabels:
+      app: # ???
+  policyTypes:
+    - Ingress
+  ingress:
+    - ports:
+        - port: # ??? port de l'application (gunicorn)
+      # Pas de restriction sur la source : l'Ingress Controller peut venir
+      # de kube-system ou d'un autre namespace selon la configuration minikube.
+      # Si vous voulez restreindre, filtrez par namespace avec namespaceSelector.
+
+---
+# Règle 4 : autoriser taskmanager à parler à Redis (egress depuis taskmanager)
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-taskmanager-to-redis
+  namespace: # ???
+spec:
+  podSelector:
+    matchLabels:
+      app: # ??? qui initie la connexion ?
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app: # ??? qui reçoit la connexion ?
+      ports:
+        - port: # ??? port de Redis
+
+---
+# Règle 5 : autoriser Redis à recevoir des connexions depuis taskmanager (ingress vers Redis)
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-redis-from-taskmanager
+  namespace: # ???
+spec:
+  podSelector:
+    matchLabels:
+      app: # ???
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: # ???
+      ports:
+        - port: # ???

@@ -1,0 +1,7 @@
+# NOTE : ces versions sont intentionnellement anciennes.
+# Votre pipeline CI/CD devra détecter les vulnérabilités et vous devrez les corriger.
+flask==2.0.1
+werkzeug==2.0.1
+redis==3.5.3
+gunicorn==20.1.0
+Jinja2==3.0.0

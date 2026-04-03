@@ -1,0 +1,31 @@
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: taskmanager-quota
+  namespace: # ??? même namespace que 00-namespace.yaml
+spec:
+  hard:
+    requests.cpu: "???"       # limite totale CPU pour tous les Pods du namespace
+    requests.memory: "???"    # limite totale mémoire (ex: 512Mi, 1Gi...)
+    limits.cpu: "???"
+    limits.memory: "???"
+    pods: "???"               # nombre maximum de Pods autorisés dans ce namespace
+
+---
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: taskmanager-limits
+  namespace: # ???
+spec:
+  limits:
+    - type: Container
+      default:                # valeurs appliquées si le conteneur ne définit pas de limits
+        cpu: "???"
+        memory: "???"
+      defaultRequest:         # valeurs appliquées si le conteneur ne définit pas de requests
+        cpu: "???"
+        memory: "???"
+      max:                    # valeurs maximales qu'un conteneur peut demander
+        cpu: "???"
+        memory: "???"

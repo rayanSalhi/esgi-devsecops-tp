@@ -1,0 +1,104 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: taskmanager
+  namespace: # ???
+  labels:
+    app: taskmanager
+spec:
+  replicas: # ??? (minimum requis : 2)
+  selector:
+    matchLabels:
+      app: taskmanager
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: # ???       — combien de Pods supplémentaires pendant la mise à jour ?
+      maxUnavailable: # ???  — combien de Pods peuvent être indisponibles pendant la mise à jour ?
+  template:
+    metadata:
+      labels:
+        app: taskmanager
+    spec:
+      # ??? Référencez le ServiceAccount dédié à l'application (défini dans 08-rbac.yaml)
+      # Pourquoi ne pas utiliser le ServiceAccount "default" ?
+      serviceAccountName: # ???
+      automountServiceAccountToken: # ??? l'app a-t-elle besoin d'accéder à l'API Kubernetes ?
+
+      # ??? Définissez un securityContext au niveau du Pod
+      securityContext:
+        runAsNonRoot: # ???
+        runAsUser: # ???     — quel UID utiliser ? (hint: regardez votre Dockerfile)
+        fsGroup: # ???
+
+      containers:
+        - name: taskmanager
+          image: # ??? format attendu : ghcr.io/<votre-username>/taskmanager:<tag>
+          imagePullPolicy: # ??? Always, IfNotPresent, ou Never ?
+          ports:
+            - containerPort: # ??? port sur lequel gunicorn écoute
+
+          env:
+            # L'application lit ces variables d'environnement (voir app.py)
+            - name: REDIS_HOST
+              value: # ??? nom DNS du Service Redis dans le cluster
+            - name: REDIS_PORT
+              value: "6379"
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: redis-secret
+                  key: # ??? même clé que dans 02-secret.yaml
+
+          # ??? Définissez la sonde liveness
+          # L'endpoint /healthz retourne 200 si l'app est vivante
+          livenessProbe:
+            httpGet:
+              path: # ???
+              port: # ???
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            failureThreshold: 3
+
+          # ??? Définissez la sonde readiness
+          # L'endpoint /readyz retourne 200 seulement si Redis est accessible
+          readinessProbe:
+            httpGet:
+              path: # ???
+              port: # ???
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            failureThreshold: 3
+
+          resources:
+            requests:
+              memory: "???"
+              cpu: "???"
+            limits:
+              memory: "???"
+              cpu: "???"
+
+          # ??? Définissez le securityContext au niveau du conteneur
+          # Toutes les contraintes listées dans les consignes doivent être présentes
+          securityContext:
+            allowPrivilegeEscalation: # ???
+            readOnlyRootFilesystem: # ???
+            capabilities:
+              drop:
+                - "???"   # valeur attendue : "ALL" pour supprimer toutes les capabilities Linux
+
+          # Si readOnlyRootFilesystem: true provoque des erreurs au démarrage de gunicorn,
+          # identifiez les chemins qui nécessitent de l'écriture (ex: /tmp) et ajoutez
+          # un volume emptyDir pour chacun. Exemple de structure :
+          #
+          # volumeMounts:
+          #   - name: tmp
+          #     mountPath: /tmp
+          #
+          # volumes:
+          #   - name: tmp
+          #     emptyDir: {}
+          volumeMounts: []
+
+      volumes: []
+      # ??? Complétez les volumes si nécessaire
