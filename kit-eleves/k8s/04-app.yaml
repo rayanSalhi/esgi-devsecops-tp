@@ -28,7 +28,7 @@ spec:
         fsGroup: 10001
       containers:
         - name: taskmanager
-          image: ghcr.io/votre-username/taskmanager:latest
+          image: ghcr.io/TON_USER_GITHUB/taskmanager:latest
           imagePullPolicy: Always
           ports:
             - containerPort: 5000
