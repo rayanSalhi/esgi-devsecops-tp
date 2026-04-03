@@ -2,20 +2,20 @@ apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
   name: redis-pvc
-  namespace: # ???
+  namespace: taskmanager
 spec:
   accessModes:
-    - # ??? quel mode d'accès est adapté pour Redis ? (ReadWriteOnce, ReadWriteMany...)
+    - ReadWriteOnce
   resources:
     requests:
-      storage: # ??? quelle taille est raisonnable pour ce TP ? (ex: 1Gi)
+      storage: 1Gi
 
 ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: redis
-  namespace: # ???
+  namespace: taskmanager
   labels:
     app: redis
 spec:
@@ -28,51 +28,49 @@ spec:
       labels:
         app: redis
     spec:
-      serviceAccountName: # ??? ServiceAccount dédié à Redis (voir 08-rbac.yaml)
+      serviceAccountName: redis-sa
       automountServiceAccountToken: false
       containers:
         - name: redis
           image: redis:7-alpine
-          # Redis doit démarrer avec un mot de passe.
-          # redis-server accepte l'option --requirepass directement en argument.
-          # La variable d'environnement ci-dessous permet de l'injecter sans l'écrire en clair.
           command: ["redis-server"]
           args:
             - "--requirepass"
-            - "$(REDIS_PASSWORD)"    # fait référence à la variable d'env définie ci-dessous
+            - "$(REDIS_PASSWORD)"
           env:
             - name: REDIS_PASSWORD
               valueFrom:
                 secretKeyRef:
                   name: redis-secret
-                  key: # ??? même clé que dans 02-secret.yaml (ex: REDIS_PASSWORD)
+                  key: REDIS_PASSWORD
           ports:
-            - containerPort: # ??? port par défaut de Redis
+            - containerPort: 6379
           livenessProbe:
-            # Redis ne propose pas d'endpoint HTTP.
-            # Utilisez une probe de type exec avec redis-cli.
-            # Indice : sh -c "redis-cli -a $REDIS_PASSWORD ping"
             exec:
               command:
-                - "???"   # remplacez par la commande complète (string unique ou liste de strings)
+                - sh
+                - -c
+                - redis-cli -a "$REDIS_PASSWORD" ping
             initialDelaySeconds: 10
             periodSeconds: 10
           readinessProbe:
             exec:
               command:
-                - "???"   # même approche que la liveness probe
+                - sh
+                - -c
+                - redis-cli -a "$REDIS_PASSWORD" ping
             initialDelaySeconds: 5
             periodSeconds: 5
           resources:
             requests:
-              memory: "???"
-              cpu: "???"
+              memory: "64Mi"
+              cpu: "100m"
             limits:
-              memory: "???"
-              cpu: "???"
+              memory: "256Mi"
+              cpu: "300m"
           volumeMounts:
             - name: redis-data
-              mountPath: # ??? répertoire de données par défaut de Redis dans l'image Alpine
+              mountPath: /data
       volumes:
         - name: redis-data
           persistentVolumeClaim:
@@ -83,11 +81,11 @@ apiVersion: v1
 kind: Service
 metadata:
   name: redis
-  namespace: # ???
+  namespace: taskmanager
 spec:
-  type: # ??? quel type de Service pour Redis ? Doit-il être accessible depuis l'extérieur du cluster ?
+  type: ClusterIP
   selector:
     app: redis
   ports:
-    - port: # ??? port exposé par le Service
-      targetPort: # ??? port écouté par le conteneur Redis
+    - port: 6379
+      targetPort: 6379

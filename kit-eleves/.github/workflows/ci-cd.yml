@@ -1,38 +1,22 @@
-# ============================================================
-# Pipeline CI/CD – TP DevSecOps ESGI 5A
-#
-# À compléter. Les ??? indiquent les zones à remplir.
-# Consultez : https://docs.github.com/en/actions/writing-workflows
-# ============================================================
-
 name: CI/CD DevSecOps
 
 on:
   push:
     branches:
-      - main   # ??? ajustez si votre branche principale s'appelle autrement
+      - main
   pull_request:
     branches:
       - main
-  workflow_dispatch:  # déclenchement manuel depuis l'interface GitHub
+  workflow_dispatch:
 
-# Variables globales disponibles dans tous les jobs
 env:
-  # Nom complet de l'image : remplacez <votre-username> par votre nom d'utilisateur GitHub
   IMAGE_NAME: ghcr.io/${{ github.repository_owner }}/taskmanager
-  # Tag unique basé sur le SHA du commit — garantit la traçabilité de chaque build
   IMAGE_TAG: ${{ github.sha }}
 
 jobs:
-
-  # ----------------------------------------------------------
-  # JOB 1 : Vérification du Dockerfile avec hadolint
-  # Ne nécessite pas d'accès au cluster → runner cloud suffisant
-  # ----------------------------------------------------------
   lint:
     name: Lint Dockerfile
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout du code
         uses: actions/checkout@v4
@@ -41,69 +25,54 @@ jobs:
         uses: hadolint/hadolint-action@v3.1.0
         with:
           dockerfile: Dockerfile
-          failure-threshold: error   # échoue uniquement sur les erreurs, ignore les warnings
+          failure-threshold: error
 
-
-  # ----------------------------------------------------------
-  # JOB 2 : Scan de sécurité avec Trivy
-  # Construit l'image localement et la scanne AVANT de la pousser
-  # ----------------------------------------------------------
   scan:
     name: Security Scan (Trivy)
     runs-on: ubuntu-latest
-    needs: lint   # ne démarre qu'après la réussite du lint
-
+    needs: lint
     steps:
       - name: Checkout du code
         uses: actions/checkout@v4
 
-      - name: Build de l'image Docker (locale, sans push)
-        run: |
-          # Construisez l'image avec un tag temporaire pour le scan.
-          # L'image reste locale — elle ne sera pas poussée vers un registre ici.
-          docker build -t taskmanager:scan-${{ github.sha }} .
+      - name: Build de l'image Docker
+        run: docker build -t taskmanager:scan-${{ github.sha }} .
 
-      - name: Scan Trivy – vulnérabilités image
+      - name: Scan Trivy
         uses: aquasecurity/trivy-action@master
         with:
           image-ref: taskmanager:scan-${{ github.sha }}
-          format: sarif              # format pour GitHub Security
+          format: sarif
           output: trivy-results.sarif
-          severity: HIGH,CRITICAL    # sévérités à détecter
-          exit-code: "1"             # fait échouer le job si des CVE sont trouvées
-          ignore-unfixed: "false"    # inclure les vulnérabilités sans correctif disponible
+          severity: HIGH,CRITICAL
+          exit-code: "1"
+          ignore-unfixed: "false"
 
-      - name: Upload rapport SARIF vers GitHub Security
+      - name: Upload SARIF
         uses: github/codeql-action/upload-sarif@v3
-        if: always()   # uploader même si le scan a échoué
+        if: always()
         with:
           sarif_file: trivy-results.sarif
 
-
-  # ----------------------------------------------------------
-  # JOB 3 : Build final et push vers ghcr.io
-  # Ne s'exécute QUE si le scan a réussi (aucune CVE HIGH/CRITICAL)
-  # ----------------------------------------------------------
   build-push:
     name: Build & Push image
     runs-on: ubuntu-latest
     needs: scan
     permissions:
       contents: read
-      packages: write   # nécessaire pour pousser vers ghcr.io
-
+      packages: write
     steps:
       - name: Checkout du code
         uses: actions/checkout@v4
 
-      - name: Authentification à ghcr.io
+      - name: Login GHCR
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}   # token automatiquement disponible dans Actions
+          password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build et push de l'image
+      - name: Build & Push
         uses: docker/build-push-action@v5
         with:
           context: .
@@ -112,45 +81,28 @@ jobs:
             ${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}
             ${{ env.IMAGE_NAME }}:latest
 
-
-  # ----------------------------------------------------------
-  # JOB 4 : Déploiement sur Kubernetes
-  # Tourne sur le runner auto-hébergé (seul à avoir accès à minikube)
-  # Ne s'exécute QUE sur la branche main
-  # ----------------------------------------------------------
   deploy:
     name: Deploy to Kubernetes
-    runs-on: self-hosted   # runner local avec accès au cluster minikube
+    runs-on: self-hosted
     needs: build-push
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-
     steps:
       - name: Checkout du code
         uses: actions/checkout@v4
 
-      - name: Configuration de kubectl
-        # Le secret KUBECONFIG_B64 contient le kubeconfig encodé en base64.
-        # Générez-le avec : cat ~/.kube/config | base64
-        # Ajoutez-le dans : Settings → Secrets → Actions → New repository secret
+      - name: Configure kubectl
         run: |
           mkdir -p ~/.kube
           echo "${{ secrets.KUBECONFIG_B64 }}" | base64 -d > ~/.kube/config
           chmod 600 ~/.kube/config
-          kubectl cluster-info   # vérification que le cluster est accessible
+          kubectl cluster-info
 
-      - name: Mise à jour du tag d'image dans les manifestes
-        # Remplace la valeur du champ image: dans 04-app.yaml par le tag du commit actuel.
-        # ??? Adaptez cette commande selon la façon dont vous avez écrit votre image dans 04-app.yaml
+      - name: Update image tag
         run: |
-          sed -i "s|${{ env.IMAGE_NAME }}:.*|${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}|g" k8s/04-app.yaml
+          sed -i "s|image: ghcr.io/.*/taskmanager:.*|image: ${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}|g" k8s/04-app.yaml
 
-      - name: Déploiement des manifestes Kubernetes
-        run: |
-          # ??? Appliquez les manifestes dans l'ordre.
-          # kubectl apply -f k8s/ les applique dans l'ordre alphabétique des fichiers.
-          kubectl apply -f k8s/
+      - name: Apply manifests
+        run: kubectl apply -f k8s/
 
-      - name: Vérification du rollout
-        run: |
-          # ??? Attendez que le Deployment soit entièrement déployé avant de terminer le job.
-          # Indice : kubectl rollout status deployment/<nom> -n <namespace> --timeout=120s
+      - name: Verify rollout
+        run: kubectl rollout status deployment/taskmanager -n taskmanager --timeout=120s

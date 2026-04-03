@@ -1,7 +1,7 @@
 apiVersion: v1
 kind: Namespace
 metadata:
-  name: # ??? nom du namespace (voir consignes)
+  name: taskmanager
   labels:
     app: taskmanager
-    # ??? ajoutez un label indiquant l'environnement (ex: env: ...)
+    env: dev

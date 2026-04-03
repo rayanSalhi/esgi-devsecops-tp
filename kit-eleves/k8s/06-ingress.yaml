@@ -2,20 +2,19 @@ apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: taskmanager
-  namespace: # ???
+  namespace: taskmanager
   annotations:
-    # ??? Quelle annotation permet de réécrire l'URL cible avec nginx-ingress ?
-    # Consultez la doc : https://kubernetes.github.io/ingress-nginx/user-guide/nginx-configuration/annotations/
+    nginx.ingress.kubernetes.io/rewrite-target: /
 spec:
-  ingressClassName: # ??? nom de la classe Ingress utilisée par minikube
+  ingressClassName: nginx
   rules:
-    - host: # ??? hostname défini dans les consignes
+    - host: taskmanager.local
       http:
         paths:
           - path: /
-            pathType: # ??? Prefix ou Exact ?
+            pathType: Prefix
             backend:
               service:
-                name: # ??? nom du Service de l'application
+                name: taskmanager
                 port:
-                  number: # ???
+                  number: 80
